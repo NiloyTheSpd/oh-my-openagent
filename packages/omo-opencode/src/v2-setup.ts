@@ -12,6 +12,7 @@ import { registerCommandsV2, registerMcpV2, registerSkillsV2 } from "./v2-regist
 import { registerHeadersV2Hook, registerToolDefinitionV2 } from "./v2-request"
 import { registerSessionV2Hooks } from "./v2-session"
 import { registerToolGuardV2Hooks } from "./v2-tool-guards"
+import { registerAgentsV2 } from "./v2-agents"
 
 export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   const directory = ctx.location.directory
@@ -33,6 +34,7 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   await registerCommandsV2(ctx, validation.config)
   await registerMcpV2(ctx, validation.config, directory)
   await registerPromptV2Hook(ctx, validation.config)
+  await registerAgentsV2(ctx, validation.config)
   const { onSessionDeleted } = await registerToolAfterV2Hooks(ctx, { fsyncAfter, modelCacheState })
   await registerPureToolsV2(ctx, directory)
   return registerLifecycleV2(ctx, { onSessionDeleted })
