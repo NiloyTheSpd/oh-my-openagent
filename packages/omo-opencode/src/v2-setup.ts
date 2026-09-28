@@ -25,7 +25,10 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   })
   warnUnsupportedSystems(validation.config)
   await registerSessionV2Hooks(ctx)
-  const { fsyncAfter } = await registerToolGuardV2Hooks(ctx)
+  const { fsyncAfter, commentCheckerAfter, webfetchAfter } = await registerToolGuardV2Hooks(
+    ctx,
+    validation.config,
+  )
   const modelCacheState = newModelCacheState()
   await registerModelV2(ctx, validation.config, modelCacheState)
   await registerToolDefinitionV2(ctx)
@@ -35,7 +38,13 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   await registerMcpV2(ctx, validation.config, directory)
   await registerPromptV2Hook(ctx, validation.config)
   await registerAgentsV2(ctx, validation.config)
-  const { onSessionDeleted } = await registerToolAfterV2Hooks(ctx, { fsyncAfter, modelCacheState })
+  const { onSessionDeleted } = await registerToolAfterV2Hooks(ctx, {
+    fsyncAfter,
+    commentCheckerAfter,
+    webfetchAfter,
+    modelCacheState,
+    pluginConfig: validation.config,
+  })
   await registerPureToolsV2(ctx, directory)
   return registerLifecycleV2(ctx, { onSessionDeleted })
 }

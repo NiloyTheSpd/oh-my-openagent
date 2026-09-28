@@ -43,7 +43,7 @@ describe("v2 tool guards", () => {
     }
 
     // when setup registers guards and the server invokes the callback
-    await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context)
+    await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, {})
     await captured?.(event)
 
     // then the tool name was normalized and args pass through
@@ -52,8 +52,7 @@ describe("v2 tool guards", () => {
     expect(event.input).toEqual({ filePath: "/tmp/v2-guard-test/notes.md" })
   })
 
-  it("blocks prometheus writes outside plan files", async () => {
-    // given a recorded prometheus agent and a fake before-hook capture
+  it("blocks prometheus writes outside plan files", async () => {    // given a recorded prometheus agent and a fake before-hook capture
     const { setSessionAgent, clearSessionAgent } = await import(
       "./features/claude-code-session-state"
     )
@@ -81,7 +80,7 @@ describe("v2 tool guards", () => {
 
     try {
       // when registered and invoked
-      await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context)
+      await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, {})
       const error = await captured?.(event).then(
         () => undefined,
         (failure: unknown) => failure,
@@ -93,5 +92,42 @@ describe("v2 tool guards", () => {
     } finally {
       clearSessionAgent("ses-prometheus-test")
     }
+  })
+
+  it("honors disabled_hooks for the write guard", async () => {
+    // given the write guard disabled and an overwrite without prior read
+    let captured: ((event: CapturedEvent) => Promise<void> | void) | undefined
+    const ctx = {
+      location: { directory: "/tmp/v2-guard-test" },
+      tool: {
+        hook: async (
+          _name: string,
+          callback: (event: CapturedEvent) => Promise<void> | void,
+        ) => {
+          captured = callback
+        },
+      },
+    }
+    const event: CapturedEvent = {
+      tool: "write",
+      sessionID: "ses-disabled-test",
+      agent: "build",
+      messageID: "msg-test",
+      id: "call-test",
+      input: { filePath: "/tmp/v2-guard-test/existing.md", content: "new" },
+    }
+
+    // when registered with the guard disabled and invoked
+    await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, {
+      disabled_hooks: ["write-existing-file-guard"],
+    })
+    const error = await captured?.(event).then(
+      () => undefined,
+      (failure: unknown) => failure,
+    )
+
+    // then the write proceeds (no guard to block it)
+    expect(captured).not.toBeUndefined()
+    expect(error).toBeUndefined()
   })
 })

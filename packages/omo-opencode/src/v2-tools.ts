@@ -7,6 +7,7 @@ import { createCategorySkillReminderHook } from "./hooks/category-skill-reminder
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/hook"
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/hook"
 import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/hook"
+import { createPlanFormatValidatorHook } from "./hooks/plan-format-validator/hook"
 import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/hook"
 import { createReadImageResizerHook } from "./hooks/read-image-resizer/hook"
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/hook"
@@ -16,6 +17,8 @@ import type { ModelCacheState } from "./plugin-state"
 import { createGlobTools } from "./tools/glob/tools"
 import { createGrepTools } from "./tools/grep/tools"
 import type { GuardFn } from "./v2-tool-guards"
+import { isV2HookEnabled } from "./v2-enabled"
+import type { OhMyOpenCodeConfig } from "./config"
 
 type AfterInput = { tool: string; sessionID: string; callID: string }
 type AfterOutput = { title: string; output: string; metadata: unknown }
@@ -88,28 +91,56 @@ export async function registerPureToolsV2(ctx: Plugin.Context, directory: string
 
 export async function registerToolAfterV2Hooks(
   ctx: Plugin.Context,
-  args: { fsyncAfter: GuardFn; modelCacheState: ModelCacheState },
+  args: {
+    fsyncAfter: GuardFn
+    commentCheckerAfter: GuardFn | undefined
+    webfetchAfter: GuardFn | undefined
+    modelCacheState: ModelCacheState
+    pluginConfig: OhMyOpenCodeConfig
+  },
 ): Promise<{ onSessionDeleted: ((sessionID: string) => void)[] }> {
   // client is a stub: V1 code uses it only as a WeakMap cache key plus live
   // session reads (which fail soft to null usage inside try/catch). A stable
   // per-setup object preserves V1 per-load cache semantics.
   const v1ctx = { directory: ctx.location.directory, client: {} } as unknown as PluginInput
-  const agentsInjector = createDirectoryAgentsInjectorHook(v1ctx, args.modelCacheState)
-  const readmeInjector = createDirectoryReadmeInjectorHook(v1ctx, args.modelCacheState)
-  const afterFns: GuardFn[] = [
-    createEmptyTaskResponseDetectorHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
-    createJsonErrorRecoveryHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
-    args.fsyncAfter,
-    createToolOutputTruncatorHook(v1ctx, { modelCacheState: args.modelCacheState })["tool.execute.after"] as unknown as GuardFn,
-    agentsInjector["tool.execute.after"] as unknown as GuardFn,
-    readmeInjector["tool.execute.after"] as unknown as GuardFn,
-    createAgentUsageReminderHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
-    createCategorySkillReminderHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
-    createReadImageResizerHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
-    createEditErrorRecoveryHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
-    createTaskResumeInfoHook()["tool.execute.after"] as unknown as GuardFn,
-  ]
+  const enabled = (name: string): boolean => isV2HookEnabled(args.pluginConfig, name)
+  const agentsInjector = enabled("directory-agents-injector")
+    ? createDirectoryAgentsInjectorHook(v1ctx, args.modelCacheState)
+    : undefined
+  const readmeInjector = enabled("directory-readme-injector")
+    ? createDirectoryReadmeInjectorHook(v1ctx, args.modelCacheState)
+    : undefined
+  const afterFns: GuardFn[] = []
+  const push = (name: string, fn: unknown): void => {
+    if (!enabled(name) || typeof fn !== "function") return
+    afterFns.push(fn as unknown as GuardFn)
+  }
+  push("empty-task-response-detector", createEmptyTaskResponseDetectorHook(v1ctx)["tool.execute.after"])
+  push("json-error-recovery", createJsonErrorRecoveryHook(v1ctx)["tool.execute.after"])
+  if (isV2HookEnabled(args.pluginConfig, "fsync-skip-warning")) {
+    afterFns.push(args.fsyncAfter)
+  }
+  push("tool-output-truncator", createToolOutputTruncatorHook(v1ctx, { modelCacheState: args.modelCacheState })["tool.execute.after"])
+  if (agentsInjector) {
+    push("directory-agents-injector", agentsInjector["tool.execute.after"])
+  }
+  if (readmeInjector) {
+    push("directory-readme-injector", readmeInjector["tool.execute.after"])
+  }
+  push("agent-usage-reminder", createAgentUsageReminderHook(v1ctx)["tool.execute.after"])
+  push("category-skill-reminder", createCategorySkillReminderHook(v1ctx)["tool.execute.after"])
+  push("read-image-resizer", createReadImageResizerHook(v1ctx)["tool.execute.after"])
+  push("edit-error-recovery", createEditErrorRecoveryHook(v1ctx)["tool.execute.after"])
+  push("task-resume-info", createTaskResumeInfoHook()["tool.execute.after"])
+  push("plan-format-validator", createPlanFormatValidatorHook(v1ctx)["tool.execute.after"])
+  if (args.commentCheckerAfter) {
+    afterFns.push(args.commentCheckerAfter)
+  }
+  if (args.webfetchAfter) {
+    afterFns.push(args.webfetchAfter)
+  }
   const onSessionDeleted = [agentsInjector, readmeInjector]
+    .filter((hook): hook is NonNullable<typeof hook> => hook !== undefined)
     .map((hook) => hook.event)
     .filter((handler): handler is NonNullable<typeof handler> => typeof handler === "function")
     .map((handler) => (sessionID: string) => {

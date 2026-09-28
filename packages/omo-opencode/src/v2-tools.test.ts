@@ -102,7 +102,10 @@ describe("v2 tools", () => {
     // when registered and invoked
     await registerToolAfterV2Hooks(ctx as unknown as Plugin.Context, {
       fsyncAfter: async () => {},
+      commentCheckerAfter: undefined,
+      webfetchAfter: undefined,
       modelCacheState: createModelCacheState(),
+      pluginConfig: {},
     })
     await captured?.(completedEvent)
     await captured?.(errorEvent)
