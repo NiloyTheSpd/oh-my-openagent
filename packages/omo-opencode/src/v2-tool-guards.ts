@@ -5,6 +5,7 @@ import { log, replaceToolArgs } from "./shared"
 import { createFsyncSkipWarningHook } from "./hooks/fsync-skip-warning/index"
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/hook"
 import { createNotepadWriteGuardHook } from "./hooks/notepad-write-guard/index"
+import { createPrometheusMdOnlyHook } from "./hooks/prometheus-md-only/hook"
 import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/hook"
 
 type BeforeInput = { tool: string; sessionID: string; callID: string }
@@ -34,6 +35,7 @@ export async function registerToolGuardV2Hooks(ctx: Plugin.Context): Promise<{
     createWriteExistingFileGuardHook(v1ctx)["tool.execute.before"] as unknown as GuardFn,
     createNotepadWriteGuardHook()["tool.execute.before"] as unknown as GuardFn,
     createQuestionLabelTruncatorHook()["tool.execute.before"] as unknown as GuardFn,
+    createPrometheusMdOnlyHook(v1ctx)["tool.execute.before"] as unknown as GuardFn,
     fsync["tool.execute.before"] as unknown as GuardFn,
   ]
 

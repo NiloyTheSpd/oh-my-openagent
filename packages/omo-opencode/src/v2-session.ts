@@ -3,6 +3,7 @@ import type { SessionContext } from "@opencode/plugin/promise/session"
 import { isRecord } from "@oh-my-opencode/utils"
 import { getModelCapabilities, log, resolveCompatibleModelSettings } from "./shared"
 import { getSessionPromptParams } from "./shared/session-prompt-params-state"
+import { setSessionAgent } from "./features/claude-code-session-state"
 
 const SAFE_MAX_OUTPUT_TOKENS_FALLBACK = 4096
 
@@ -92,6 +93,11 @@ export function applyContextParamsV2(event: SessionContext): void {
 
 export async function registerSessionV2Hooks(ctx: Plugin.Context): Promise<void> {
   await ctx.session.hook("context", (event) => {
+    // The context hook is the only V2 hook that carries the agent identity;
+    // record it so agent-gated before-guards can resolve agents session-locally.
+    if (typeof event.agent === "string" && event.agent.length > 0) {
+      setSessionAgent(event.sessionID, event.agent)
+    }
     applyContextParamsV2(event)
   })
 }

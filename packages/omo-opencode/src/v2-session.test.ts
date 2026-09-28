@@ -72,4 +72,40 @@ describe("v2 session context params", () => {
     expect(event.options.temperature).toBe(0.2)
     expect(event.options.maxTokens).toBe(8000)
   })
+
+  it("records the agent identity for agent-gated guards", async () => {
+    // given a fake v2 context capturing the registered callback
+    let captured: ((event: SessionContext & { agent: string }) => void) | undefined
+    const ctx = {
+      session: {
+        hook: async (
+          _name: string,
+          callback: (event: SessionContext & { agent: string }) => void,
+        ) => {
+          captured = callback
+        },
+      },
+    }
+    const { getSessionAgent, clearSessionAgent } = await import(
+      "./features/claude-code-session-state"
+    )
+
+    try {
+      // when the server invokes the callback with an agent
+      await registerSessionV2Hooks(ctx as unknown as Plugin.Context)
+      captured?.({
+        sessionID: SESSION_ID,
+        agent: "atlas",
+        model: { providerID: "acme-unknown", id: "nope-unknown" },
+        system: [],
+        messages: [],
+        options: {},
+      } as unknown as SessionContext & { agent: string })
+
+      // then the agent is recorded session-locally
+      expect(getSessionAgent(SESSION_ID)).toBe("atlas")
+    } finally {
+      clearSessionAgent(SESSION_ID)
+    }
+  })
 })
