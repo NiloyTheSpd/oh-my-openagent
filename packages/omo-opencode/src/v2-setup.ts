@@ -4,8 +4,9 @@ import { validatePluginConfig } from "./config/validate"
 import { migrateLegacyWorkspaceDirectory } from "./shared/legacy-workspace-migration"
 import { log } from "./shared/logger"
 import { registerLifecycleV2 } from "./v2-lifecycle"
-import { registerCommandsV2, registerMcpV2, registerSkillsV2 } from "./v2-registry"
 import { registerModelV2, newModelCacheState } from "./v2-models"
+import { registerPromptV2Hook } from "./v2-prompt"
+import { registerCommandsV2, registerMcpV2, registerSkillsV2 } from "./v2-registry"
 import { registerHeadersV2Hook, registerToolDefinitionV2 } from "./v2-request"
 import { registerSessionV2Hooks } from "./v2-session"
 import { registerToolGuardV2Hooks } from "./v2-tool-guards"
@@ -27,5 +28,6 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   await registerSkillsV2(ctx, validation.config)
   await registerCommandsV2(ctx, validation.config)
   await registerMcpV2(ctx, validation.config, directory)
+  await registerPromptV2Hook(ctx, validation.config)
   return registerLifecycleV2(ctx)
 }
