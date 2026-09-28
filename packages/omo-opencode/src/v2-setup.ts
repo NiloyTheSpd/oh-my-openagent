@@ -25,11 +25,9 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   })
   warnUnsupportedSystems(validation.config)
   await registerSessionV2Hooks(ctx)
-  const { fsyncAfter, commentCheckerAfter, webfetchAfter } = await registerToolGuardV2Hooks(
-    ctx,
-    validation.config,
-  )
   const modelCacheState = newModelCacheState()
+  const { fsyncAfter, commentCheckerAfter, webfetchAfter, rulesAfter, rulesDeleted } =
+    await registerToolGuardV2Hooks(ctx, { pluginConfig: validation.config, modelCacheState })
   await registerModelV2(ctx, validation.config, modelCacheState)
   await registerToolDefinitionV2(ctx)
   await registerHeadersV2Hook(ctx)
@@ -42,6 +40,8 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
     fsyncAfter,
     commentCheckerAfter,
     webfetchAfter,
+    rulesAfter,
+    rulesDeleted,
     modelCacheState,
     pluginConfig: validation.config,
   })

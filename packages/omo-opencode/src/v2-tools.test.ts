@@ -104,6 +104,8 @@ describe("v2 tools", () => {
       fsyncAfter: async () => {},
       commentCheckerAfter: undefined,
       webfetchAfter: undefined,
+      rulesAfter: undefined,
+      rulesDeleted: undefined,
       modelCacheState: createModelCacheState(),
       pluginConfig: {},
     })
@@ -114,5 +116,73 @@ describe("v2 tools", () => {
     expect(captured).not.toBeUndefined()
     expect(completedEvent.result.content).not.toBe("   ")
     expect(errorEvent.result.content).toBe("   ")
+  })
+
+  it("injects project rules into read output", async () => {
+    // given a project rule file and a fake after-hook capture
+    const { mkdirSync, writeFileSync, rmSync } = await import("node:fs")
+    const root = "/tmp/v2-rules-test"
+    mkdirSync(`${root}/.omo/rules`, { recursive: true })
+    writeFileSync(`${root}/.omo/rules/demo.md`, "---\nalwaysApply: true\n---\n# Demo rule MARKER-RULEQA\n")
+    writeFileSync(`${root}/note.txt`, "note body")
+    let captured: ((event: {
+      status: string
+      tool: string
+      sessionID: string
+      id: string
+      input: unknown
+      result: { content: unknown }
+    }) => Promise<void>) | undefined
+    const ctx = {
+      location: { directory: root },
+      tool: {
+        hook: async (
+          _name: string,
+          callback: (event: {
+            status: string
+            tool: string
+            sessionID: string
+            id: string
+            input: unknown
+            result: { content: unknown }
+          }) => Promise<void>,
+        ) => {
+          captured = callback
+        },
+      },
+    }
+    const event = {
+      status: "completed",
+      tool: "read",
+      sessionID: "ses-rules-test",
+      id: "call-rules-test",
+      input: { path: `${root}/note.txt` },
+      result: { content: "note body" },
+    }
+
+    try {
+      // when registered through the production wiring and invoked
+      const { registerToolGuardV2Hooks } = await import("./v2-tool-guards")
+      const guards = await registerToolGuardV2Hooks(ctx as never, {
+        pluginConfig: {},
+        modelCacheState: createModelCacheState(),
+      })
+      await registerToolAfterV2Hooks(ctx as unknown as Plugin.Context, {
+        fsyncAfter: guards.fsyncAfter,
+        commentCheckerAfter: guards.commentCheckerAfter,
+        webfetchAfter: guards.webfetchAfter,
+        rulesAfter: guards.rulesAfter,
+        rulesDeleted: guards.rulesDeleted,
+        modelCacheState: createModelCacheState(),
+        pluginConfig: {},
+      })
+      await captured?.(event as never)
+
+      // then the rule block was injected
+      expect(captured).not.toBeUndefined()
+      expect(event.result.content).toContain("MARKER-RULEQA")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

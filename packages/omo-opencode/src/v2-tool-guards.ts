@@ -3,6 +3,7 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { isRecord } from "@oh-my-opencode/utils"
 import { log, replaceToolArgs } from "./shared"
 import type { OhMyOpenCodeConfig } from "./config"
+import type { ModelCacheState } from "./plugin-state"
 import { createBashFileReadGuardHook } from "./hooks/bash-file-read-guard"
 import { createCommentCheckerHooks } from "./hooks/comment-checker/hook"
 import { createFsyncSkipWarningHook } from "./hooks/fsync-skip-warning/index"
@@ -13,6 +14,7 @@ import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-gu
 import { createNotepadWriteGuardHook } from "./hooks/notepad-write-guard/index"
 import { createPrometheusMdOnlyHook } from "./hooks/prometheus-md-only/hook"
 import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/hook"
+import { createRulesInjectorHook } from "./hooks/rules-injector/hook"
 import { isV2HookEnabled } from "./v2-enabled"
 
 type BeforeInput = { tool: string; sessionID: string; callID: string }
@@ -33,15 +35,19 @@ export function stripMcpPrefix(tool: string): string {
 
 export async function registerToolGuardV2Hooks(
   ctx: Plugin.Context,
-  pluginConfig: OhMyOpenCodeConfig,
+  args: { pluginConfig: OhMyOpenCodeConfig; modelCacheState: ModelCacheState },
 ): Promise<{
   fsyncAfter: GuardFn
   commentCheckerAfter: GuardFn | undefined
   webfetchAfter: GuardFn | undefined
+  rulesAfter: GuardFn | undefined
+  rulesDeleted: ((sessionID: string) => void) | undefined
 }> {
+  const { pluginConfig, modelCacheState } = args
   const enabled = (name: string): boolean => isV2HookEnabled(pluginConfig, name)
-  // Most factories only read ctx.directory; client-dependent ones take none.
-  const v1ctx = { directory: ctx.location.directory } as unknown as PluginInput
+  // client is a stub object: factories only need ctx.directory plus a stable
+  // WeakMap key for usage caches (live session reads fail soft to null).
+  const v1ctx = { directory: ctx.location.directory, client: {} } as unknown as PluginInput
   // fsync timing state must be shared between its before/after halves.
   const fsync = enabled("fsync-skip-warning") ? createFsyncSkipWarningHook() : undefined
   const commentChecker = enabled("comment-checker") ? createCommentCheckerHooks() : undefined
@@ -65,6 +71,14 @@ export async function registerToolGuardV2Hooks(
   }
   if (webfetch) {
     push("webfetch-redirect-guard", webfetch["tool.execute.before"])
+  }
+  // Transcript hydration degrades to an empty set without a live client
+  // (dedup fallback); file-path rule injection works unchanged.
+  const rules = enabled("rules-injector")
+    ? createRulesInjectorHook(v1ctx, modelCacheState)
+    : undefined
+  if (rules) {
+    push("rules-injector", rules["tool.execute.before"])
   }
   if (fsync) {
     guardFns.push(fsync["tool.execute.before"] as unknown as GuardFn)
@@ -112,5 +126,11 @@ export async function registerToolGuardV2Hooks(
     fsyncAfter: (fsync?.["tool.execute.after"] ?? (async () => {})) as unknown as GuardFn,
     commentCheckerAfter: commentChecker?.["tool.execute.after"] as unknown as GuardFn | undefined,
     webfetchAfter: webfetch?.["tool.execute.after"] as unknown as GuardFn | undefined,
+    rulesAfter: rules?.["tool.execute.after"] as unknown as GuardFn | undefined,
+    rulesDeleted: rules?.event
+      ? (sessionID: string) => {
+        void rules.event({ event: { type: "session.deleted", properties: { sessionID } } })
+      }
+      : undefined,
   }
 }

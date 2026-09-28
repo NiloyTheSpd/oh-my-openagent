@@ -95,6 +95,8 @@ export async function registerToolAfterV2Hooks(
     fsyncAfter: GuardFn
     commentCheckerAfter: GuardFn | undefined
     webfetchAfter: GuardFn | undefined
+    rulesAfter: GuardFn | undefined
+    rulesDeleted: ((sessionID: string) => void) | undefined
     modelCacheState: ModelCacheState
     pluginConfig: OhMyOpenCodeConfig
   },
@@ -139,6 +141,10 @@ export async function registerToolAfterV2Hooks(
   if (args.webfetchAfter) {
     afterFns.push(args.webfetchAfter)
   }
+  if (args.rulesAfter) {
+    afterFns.push(args.rulesAfter)
+  }
+  const extraDeleted = args.rulesDeleted ? [args.rulesDeleted] : []
   const onSessionDeleted = [agentsInjector, readmeInjector]
     .filter((hook): hook is NonNullable<typeof hook> => hook !== undefined)
     .map((hook) => hook.event)
@@ -146,6 +152,7 @@ export async function registerToolAfterV2Hooks(
     .map((handler) => (sessionID: string) => {
       void handler({ event: { type: "session.deleted", properties: { sessionID } } })
     })
+    .concat(extraDeleted)
   await ctx.tool.hook("execute.after", async (event) => {
     // Error events carry no result text, so text guards only run on completion.
     // Structured multi-part results have no V1 equivalent and are skipped;

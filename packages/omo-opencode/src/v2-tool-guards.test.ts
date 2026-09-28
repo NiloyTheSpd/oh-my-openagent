@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { Plugin } from "@opencode/plugin"
+import { createModelCacheState } from "./plugin-state"
 import { registerToolGuardV2Hooks, stripMcpPrefix } from "./v2-tool-guards"
 
 type CapturedEvent = {
@@ -43,7 +44,7 @@ describe("v2 tool guards", () => {
     }
 
     // when setup registers guards and the server invokes the callback
-    await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, {})
+    await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, { pluginConfig: {}, modelCacheState: createModelCacheState() })
     await captured?.(event)
 
     // then the tool name was normalized and args pass through
@@ -80,7 +81,7 @@ describe("v2 tool guards", () => {
 
     try {
       // when registered and invoked
-      await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, {})
+      await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, { pluginConfig: {}, modelCacheState: createModelCacheState() })
       const error = await captured?.(event).then(
         () => undefined,
         (failure: unknown) => failure,
@@ -94,8 +95,7 @@ describe("v2 tool guards", () => {
     }
   })
 
-  it("honors disabled_hooks for the write guard", async () => {
-    // given the write guard disabled and an overwrite without prior read
+  it("honors disabled_hooks for the write guard", async () => {    // given the write guard disabled and an overwrite without prior read
     let captured: ((event: CapturedEvent) => Promise<void> | void) | undefined
     const ctx = {
       location: { directory: "/tmp/v2-guard-test" },
@@ -119,7 +119,8 @@ describe("v2 tool guards", () => {
 
     // when registered with the guard disabled and invoked
     await registerToolGuardV2Hooks(ctx as unknown as Plugin.Context, {
-      disabled_hooks: ["write-existing-file-guard"],
+      pluginConfig: { disabled_hooks: ["write-existing-file-guard"] },
+      modelCacheState: createModelCacheState(),
     })
     const error = await captured?.(event).then(
       () => undefined,
