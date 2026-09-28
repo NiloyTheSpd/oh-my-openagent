@@ -3,6 +3,7 @@ import { initConfigContext } from "./cli/config-manager/config-context"
 import { validatePluginConfig } from "./config/validate"
 import { migrateLegacyWorkspaceDirectory } from "./shared/legacy-workspace-migration"
 import { log } from "./shared/logger"
+import { warnUnsupportedSystems } from "./v2-gaps"
 import { registerLifecycleV2 } from "./v2-lifecycle"
 import { registerModelV2, newModelCacheState } from "./v2-models"
 import { registerPromptV2Hook } from "./v2-prompt"
@@ -21,6 +22,7 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
     directory,
     valid: validation.valid,
   })
+  warnUnsupportedSystems(validation.config)
   await registerSessionV2Hooks(ctx)
   const { fsyncAfter } = await registerToolGuardV2Hooks(ctx)
   const modelCacheState = newModelCacheState()
