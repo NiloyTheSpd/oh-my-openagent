@@ -31,7 +31,7 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   await registerCommandsV2(ctx, validation.config)
   await registerMcpV2(ctx, validation.config, directory)
   await registerPromptV2Hook(ctx, validation.config)
-  await registerToolAfterV2Hooks(ctx, { fsyncAfter, modelCacheState })
+  const { onSessionDeleted } = await registerToolAfterV2Hooks(ctx, { fsyncAfter, modelCacheState })
   await registerPureToolsV2(ctx, directory)
-  return registerLifecycleV2(ctx)
+  return registerLifecycleV2(ctx, { onSessionDeleted })
 }

@@ -2,7 +2,14 @@ import type { Plugin } from "@opencode/plugin"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { ToolDefinition } from "@opencode-ai/plugin/tool"
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector"
+import { createAgentUsageReminderHook } from "./hooks/agent-usage-reminder/hook"
+import { createCategorySkillReminderHook } from "./hooks/category-skill-reminder/hook"
+import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/hook"
+import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/hook"
+import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/hook"
 import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/hook"
+import { createReadImageResizerHook } from "./hooks/read-image-resizer/hook"
+import { createTaskResumeInfoHook } from "./hooks/task-resume-info/hook"
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator"
 import { normalizeToolArgSchemas } from "./plugin/normalize-tool-arg-schemas"
 import type { ModelCacheState } from "./plugin-state"
@@ -13,6 +20,14 @@ import type { GuardFn } from "./v2-tool-guards"
 type AfterInput = { tool: string; sessionID: string; callID: string }
 type AfterOutput = { title: string; output: string; metadata: unknown }
 type AfterFn = GuardFn
+
+import { isRecord } from "@oh-my-opencode/utils"
+
+function titleFromInput(tool: string, input: unknown): string {
+  if (tool.toLowerCase() !== "read" || !isRecord(input)) return ""
+  const filePath = input.filePath ?? input.path
+  return typeof filePath === "string" ? filePath : ""
+}
 
 type V1Execute = (args: never, context: never) => Promise<unknown>
 
@@ -73,24 +88,73 @@ export async function registerPureToolsV2(ctx: Plugin.Context, directory: string
 
 export async function registerToolAfterV2Hooks(
   ctx: Plugin.Context,
-  args: { fsyncAfter: AfterFn; modelCacheState: ModelCacheState },
-): Promise<void> {
-  const v1ctx = { directory: ctx.location.directory } as unknown as PluginInput
-  const afterFns: AfterFn[] = [
-    createEmptyTaskResponseDetectorHook(v1ctx)["tool.execute.after"] as unknown as AfterFn,
-    createJsonErrorRecoveryHook(v1ctx)["tool.execute.after"] as unknown as AfterFn,
+  args: { fsyncAfter: GuardFn; modelCacheState: ModelCacheState },
+): Promise<{ onSessionDeleted: ((sessionID: string) => void)[] }> {
+  // client is a stub: V1 code uses it only as a WeakMap cache key plus live
+  // session reads (which fail soft to null usage inside try/catch). A stable
+  // per-setup object preserves V1 per-load cache semantics.
+  const v1ctx = { directory: ctx.location.directory, client: {} } as unknown as PluginInput
+  const agentsInjector = createDirectoryAgentsInjectorHook(v1ctx, args.modelCacheState)
+  const readmeInjector = createDirectoryReadmeInjectorHook(v1ctx, args.modelCacheState)
+  const afterFns: GuardFn[] = [
+    createEmptyTaskResponseDetectorHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
+    createJsonErrorRecoveryHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
     args.fsyncAfter,
-    createToolOutputTruncatorHook(v1ctx, { modelCacheState: args.modelCacheState })["tool.execute.after"] as unknown as AfterFn,
+    createToolOutputTruncatorHook(v1ctx, { modelCacheState: args.modelCacheState })["tool.execute.after"] as unknown as GuardFn,
+    agentsInjector["tool.execute.after"] as unknown as GuardFn,
+    readmeInjector["tool.execute.after"] as unknown as GuardFn,
+    createAgentUsageReminderHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
+    createCategorySkillReminderHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
+    createReadImageResizerHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
+    createEditErrorRecoveryHook(v1ctx)["tool.execute.after"] as unknown as GuardFn,
+    createTaskResumeInfoHook()["tool.execute.after"] as unknown as GuardFn,
   ]
+  const onSessionDeleted = [agentsInjector, readmeInjector]
+    .map((hook) => hook.event)
+    .filter((handler): handler is NonNullable<typeof handler> => typeof handler === "function")
+    .map((handler) => (sessionID: string) => {
+      void handler({ event: { type: "session.deleted", properties: { sessionID } } })
+    })
   await ctx.tool.hook("execute.after", async (event) => {
     // Error events carry no result text, so text guards only run on completion.
+    // Structured multi-part results have no V1 equivalent and are skipped;
+    // single-text-part results are edited in place (lossless).
     if (event.status !== "completed") return
-    if (typeof event.result.content !== "string") return
+    const content = event.result.content
+    let text: string | undefined
+    let writeBack: ((next: string) => void) | undefined
+    if (typeof content === "string") {
+      text = content
+      writeBack = (next) => {
+        event.result = { ...event.result, content: next }
+      }
+    } else if (Array.isArray(content)) {
+      const textParts = content.filter(
+        (part): part is { text: string } =>
+          typeof part === "object" && part !== null
+          && (part as Record<string, unknown>).type === "text"
+          && typeof (part as Record<string, unknown>).text === "string",
+      )
+      if (textParts.length !== 1) return
+      const part = textParts[0] as { text: string }
+      text = part.text
+      writeBack = (next) => {
+        part.text = next
+      }
+    } else {
+      return
+    }
     const input: AfterInput = { tool: event.tool, sessionID: event.sessionID, callID: event.id }
-    const output: AfterOutput = { title: "", output: event.result.content, metadata: {} }
+    const output: AfterOutput = {
+      title: titleFromInput(event.tool, event.input),
+      output: text,
+      metadata: event.result.metadata ?? {},
+    }
     for (const guard of afterFns) {
       await guard(input, output)
     }
-    event.result = { ...event.result, content: output.output }
+    writeBack(output.output)
   })
+
+  return { onSessionDeleted }
 }
