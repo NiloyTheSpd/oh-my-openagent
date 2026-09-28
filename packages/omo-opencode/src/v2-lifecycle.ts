@@ -50,7 +50,10 @@ function clearAllSessionState(sessionID: string): void {
   if (getMainSessionID() === sessionID) setMainSession(undefined)
 }
 
-export async function registerLifecycleV2(ctx: Plugin.Context): Promise<() => void> {
+export async function registerLifecycleV2(
+  ctx: Plugin.Context,
+  extra?: { onSessionDeleted?: ((sessionID: string) => void)[] },
+): Promise<() => void> {
   const controller = new AbortController()
   void (async () => {
     for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
@@ -68,6 +71,13 @@ export async function registerLifecycleV2(ctx: Plugin.Context): Promise<() => vo
       const sessionID = extractDeletedSessionID(event)
       if (!sessionID) continue
       clearAllSessionState(sessionID)
+      for (const handler of extra?.onSessionDeleted ?? []) {
+        try {
+          handler(sessionID)
+        } catch {
+          // Per-hook cleanup must not break the shared subscription.
+        }
+      }
     }
   })().catch(() => {})
   return () => controller.abort()
