@@ -6,6 +6,10 @@ import { OMO_INTERNAL_INITIATOR_MARKER } from "./shared"
 const INTERNAL_MARKER_CACHE_LIMIT = 1000
 const internalMarkerCache = new Map<string, boolean>()
 
+export function clearInternalMarkerCache(sessionID: string): void {
+  internalMarkerCache.delete(sessionID)
+}
+
 export function isCopilotProviderV2(providerID: string): boolean {
   return providerID === "github-copilot" || providerID === "github-copilot-enterprise"
 }
