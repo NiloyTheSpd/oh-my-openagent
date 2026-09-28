@@ -4,6 +4,7 @@ import { validatePluginConfig } from "./config/validate"
 import { migrateLegacyWorkspaceDirectory } from "./shared/legacy-workspace-migration"
 import { log } from "./shared/logger"
 import { registerModelV2, newModelCacheState } from "./v2-models"
+import { registerHeadersV2Hook, registerToolDefinitionV2 } from "./v2-request"
 import { registerSessionV2Hooks } from "./v2-session"
 import { registerToolGuardV2Hooks } from "./v2-tool-guards"
 
@@ -19,4 +20,6 @@ export async function setupV2(ctx: Plugin.Context): Promise<void> {
   await registerSessionV2Hooks(ctx)
   await registerToolGuardV2Hooks(ctx)
   await registerModelV2(ctx, validation.config, newModelCacheState())
+  await registerToolDefinitionV2(ctx)
+  await registerHeadersV2Hook(ctx)
 }
