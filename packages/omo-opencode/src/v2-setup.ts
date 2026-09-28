@@ -4,6 +4,7 @@ import { validatePluginConfig } from "./config/validate"
 import { migrateLegacyWorkspaceDirectory } from "./shared/legacy-workspace-migration"
 import { log } from "./shared/logger"
 import { registerSessionV2Hooks } from "./v2-session"
+import { registerToolGuardV2Hooks } from "./v2-tool-guards"
 
 export async function setupV2(ctx: Plugin.Context): Promise<void> {
   const directory = ctx.location.directory
@@ -15,4 +16,5 @@ export async function setupV2(ctx: Plugin.Context): Promise<void> {
     valid: validation.valid,
   })
   await registerSessionV2Hooks(ctx)
+  await registerToolGuardV2Hooks(ctx)
 }
