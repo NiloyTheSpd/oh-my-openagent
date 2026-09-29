@@ -145,9 +145,12 @@ export function registerModelFallbackV2(ctx: Plugin.Context): () => void {
         continue
       }
 
-      // Compared as a plain string: the V2 event union is wide and this port only
-      // cares that the event is a session error carrying a session id.
-      if (String(event.type) !== "session.error") continue
+      // V1 keyed this off the `session.error` hook. V2 has no `session.error` event at
+      // all; a failed model request surfaces as `session.execution.failed` with
+      // `data.sessionID` and `data.error`. `session.error` is still accepted so the
+      // port keeps working if a future release reintroduces the V1 name.
+      const type = String(event.type)
+      if (type !== "session.execution.failed" && type !== "session.error") continue
       const sessionID = extractEventSessionID(event)
       if (!sessionID) continue
 
