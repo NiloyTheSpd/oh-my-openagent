@@ -12,6 +12,7 @@ import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/hook"
 import { createReadImageResizerHook } from "./hooks/read-image-resizer/hook"
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/hook"
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator"
+import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry"
 import { normalizeToolArgSchemas } from "./plugin/normalize-tool-arg-schemas"
 import type { ModelCacheState } from "./plugin-state"
 import { createGlobTools } from "./tools/glob/tools"
@@ -133,6 +134,7 @@ export async function registerToolAfterV2Hooks(
   push("category-skill-reminder", createCategorySkillReminderHook(v1ctx)["tool.execute.after"])
   push("read-image-resizer", createReadImageResizerHook(v1ctx)["tool.execute.after"])
   push("edit-error-recovery", createEditErrorRecoveryHook(v1ctx)["tool.execute.after"])
+  push("delegate-task-retry", createDelegateTaskRetryHook(v1ctx)["tool.execute.after"])
   push("task-resume-info", createTaskResumeInfoHook()["tool.execute.after"])
   push("plan-format-validator", createPlanFormatValidatorHook(v1ctx)["tool.execute.after"])
   if (args.commentCheckerAfter) {

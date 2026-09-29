@@ -14,6 +14,7 @@ import { registerSessionV2Hooks } from "./v2-session"
 import { registerToolGuardV2Hooks } from "./v2-tool-guards"
 import { registerAgentsV2 } from "./v2-agents"
 import { clearSessionModelV2, registerModelFallbackV2 } from "./v2-model-fallback"
+import { registerAstGrepProvisionV2 } from "./v2-provision"
 import { registerSessionNotificationV2 } from "./v2-notification"
 
 export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
@@ -50,10 +51,12 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   await registerPureToolsV2(ctx, directory)
   const stopModelFallback = registerModelFallbackV2(ctx)
   const stopNotification = registerSessionNotificationV2(ctx, validation.config)
+  const stopProvision = registerAstGrepProvisionV2(ctx, validation.config)
   const stopLifecycle = await registerLifecycleV2(ctx, { onSessionDeleted: [clearSessionModelV2] })
   return () => {
     stopLifecycle()
     stopModelFallback()
     stopNotification()
+    stopProvision()
   }
 }

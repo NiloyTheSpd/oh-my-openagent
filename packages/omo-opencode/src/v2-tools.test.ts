@@ -58,6 +58,113 @@ describe("v2 tools", () => {
     expect(added).toEqual(["glob"])
   })
 
+  it("applies delegate-task-retry guidance to a completed task result", async () => {
+    // given a fake after-hook capture and a delegate task result carrying a
+    // retryable error the V1 patterns recognize
+    let captured: ((event: {
+      status: string
+      tool: string
+      sessionID: string
+      id: string
+      result: { content: unknown }
+    }) => Promise<void>) | undefined
+    const ctx = {
+      location: { directory: "/tmp/v2-tools-test" },
+      tool: {
+        hook: async (
+          _name: string,
+          callback: (event: {
+            status: string
+            tool: string
+            sessionID: string
+            id: string
+            result: { content: unknown }
+          }) => Promise<void>,
+        ) => {
+          captured = callback
+        },
+      },
+    }
+    const failure = "[ERROR] missing required parameter: run_in_background"
+
+    await registerToolAfterV2Hooks(ctx as unknown as Plugin.Context, {
+      fsyncAfter: async () => {},
+      commentCheckerAfter: undefined,
+      webfetchAfter: undefined,
+      rulesAfter: undefined,
+      rulesDeleted: undefined,
+      modelCacheState: createModelCacheState(),
+      pluginConfig: {} as never,
+    })
+    const event = {
+      status: "completed",
+      tool: "task",
+      sessionID: "ses-delegate-retry",
+      id: "call-delegate-retry",
+      result: { content: failure },
+    }
+
+    // when the after-chain runs
+    // then the retry guidance is appended to the result content in place
+    expect(captured).toBeDefined()
+    await captured!(event)
+    const content = (event.result as { content: string }).content
+    expect(content).toContain("run_in_background")
+    expect(content.length).toBeGreaterThan(failure.length)
+  })
+
+  it("leaves non-task results untouched when delegate-task-retry is registered", async () => {
+    // given the same chain and a non-task tool
+    let captured: ((event: {
+      status: string
+      tool: string
+      sessionID: string
+      id: string
+      result: { content: unknown }
+    }) => Promise<void>) | undefined
+    const ctx = {
+      location: { directory: "/tmp/v2-tools-test" },
+      tool: {
+        hook: async (
+          _name: string,
+          callback: (event: {
+            status: string
+            tool: string
+            sessionID: string
+            id: string
+            result: { content: unknown }
+          }) => Promise<void>,
+        ) => {
+          captured = callback
+        },
+      },
+    }
+    const original = "[ERROR] missing required parameter: run_in_background"
+
+    await registerToolAfterV2Hooks(ctx as unknown as Plugin.Context, {
+      fsyncAfter: async () => {},
+      commentCheckerAfter: undefined,
+      webfetchAfter: undefined,
+      rulesAfter: undefined,
+      rulesDeleted: undefined,
+      modelCacheState: createModelCacheState(),
+      pluginConfig: {} as never,
+    })
+    const event = {
+      status: "completed",
+      tool: "read",
+      sessionID: "ses-delegate-retry-2",
+      id: "call-delegate-retry-2",
+      result: { content: original },
+    }
+
+    // when the after-chain runs
+    await captured!(event)
+
+    // then the result is unchanged, because the guard is tool-scoped
+    expect((event.result as { content: string }).content).toBe(original)
+  })
+
   it("runs after-guards on completed string results only", async () => {
     // given a fake after-hook capture
     let captured: ((event: {
