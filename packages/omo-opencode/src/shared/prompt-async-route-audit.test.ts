@@ -52,6 +52,10 @@ const RAW_PROMPT_ALLOWLIST = new Map<string, string>([
     path.join(WORKSPACE_ROOT, "packages", "senpi-task", "src", "runners", "in-process", "child-handle.ts"),
     "drives a senpi CHILD AgentSession.prompt for spawned subagent turns; senpi-task cannot reach OpenCode session APIs (opencode-coupling audit) so the main-session injection invariant does not apply",
   ],
+  [
+    path.join(SOURCE_ROOT, "v2-registry.ts"),
+    "V2 builtin-command execute callback sends the user-typed command as a single dispatch; the shared prompt-async gate is unreachable because it requires a V1 client with session.promptAsync and the V2 server Context exposes no client (ADR-004). The dispatch is user-initiated rather than an idle/error/completion-edge internal injection, so the duplicate-injection invariant the gate protects does not apply",
+  ],
 ])
 
 async function listSourceFiles(directory: string): Promise<string[]> {

@@ -10,8 +10,8 @@ import { clearSessionPromptParams } from "./shared/session-prompt-params-state"
 import { clearInternalMarkerCache } from "./v2-request"
 import { clearPromptSessionState } from "./v2-prompt"
 
-export function extractDeletedSessionID(event: unknown): string | undefined {
-  if (!isRecord(event) || event.type !== "session.deleted") return undefined
+export function extractEventSessionID(event: unknown): string | undefined {
+  if (!isRecord(event)) return undefined
   for (const key of ["properties", "data", "payload"]) {
     const container = event[key]
     if (!isRecord(container)) continue
@@ -22,6 +22,11 @@ export function extractDeletedSessionID(event: unknown): string | undefined {
     return event.sessionID
   }
   return undefined
+}
+
+export function extractDeletedSessionID(event: unknown): string | undefined {
+  if (!isRecord(event) || event.type !== "session.deleted") return undefined
+  return extractEventSessionID(event)
 }
 
 function extractSessionInfo(event: unknown): { id?: string; parentID?: string } {

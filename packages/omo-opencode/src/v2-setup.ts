@@ -13,6 +13,8 @@ import { registerHeadersV2Hook, registerToolDefinitionV2 } from "./v2-request"
 import { registerSessionV2Hooks } from "./v2-session"
 import { registerToolGuardV2Hooks } from "./v2-tool-guards"
 import { registerAgentsV2 } from "./v2-agents"
+import { clearSessionModelV2, registerModelFallbackV2 } from "./v2-model-fallback"
+import { registerSessionNotificationV2 } from "./v2-notification"
 
 export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
   const directory = ctx.location.directory
@@ -46,5 +48,12 @@ export async function setupV2(ctx: Plugin.Context): Promise<() => void> {
     pluginConfig: validation.config,
   })
   await registerPureToolsV2(ctx, directory)
-  return registerLifecycleV2(ctx, { onSessionDeleted })
+  const stopModelFallback = registerModelFallbackV2(ctx)
+  const stopNotification = registerSessionNotificationV2(ctx, validation.config)
+  const stopLifecycle = await registerLifecycleV2(ctx, { onSessionDeleted: [clearSessionModelV2] })
+  return () => {
+    stopLifecycle()
+    stopModelFallback()
+    stopNotification()
+  }
 }

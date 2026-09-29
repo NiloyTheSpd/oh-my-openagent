@@ -4,6 +4,7 @@ import { isRecord } from "@oh-my-opencode/utils"
 import { getModelCapabilities, log, resolveCompatibleModelSettings } from "./shared"
 import { getSessionPromptParams } from "./shared/session-prompt-params-state"
 import { setSessionAgent } from "./features/claude-code-session-state"
+import { recordSessionModelV2 } from "./v2-model-fallback"
 
 const SAFE_MAX_OUTPUT_TOKENS_FALLBACK = 4096
 
@@ -98,6 +99,10 @@ export async function registerSessionV2Hooks(ctx: Plugin.Context): Promise<void>
     if (typeof event.agent === "string" && event.agent.length > 0) {
       setSessionAgent(event.sessionID, event.agent)
     }
+    // V2 forbids rewriting the outbound model, so the model-fallback port needs the
+    // session's current model to resolve a no-op-skipping fallback. The context hook
+    // is the only per-request observation point, so record it here.
+    recordSessionModelV2(event.sessionID, event.model)
     applyContextParamsV2(event)
   })
 }
